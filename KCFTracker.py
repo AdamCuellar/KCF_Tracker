@@ -171,7 +171,10 @@ class KCFTracker:
 
         return (rowDelta, colDelta), res.max()
 
-    def update(self, image):
+    def update(self, image, updatedRoi=None):
+        if updatedRoi:
+            self._roi = np.asarray(updatedRoi).astype(np.float32)
+
         if self._roi[0] + self._roi[2] <= 0:  self._roi[0] = -self._roi[2] + 1
         if self._roi[1] + self._roi[3] <= 0:  self._roi[1] = -self._roi[3] + 1
         if self._roi[0] >= image.shape[1] - 1:  self._roi[0] = image.shape[1] - 2
@@ -216,19 +219,3 @@ class KCFTracker:
         self.train(x, self.interpFactor)
 
         return self._roi
-
-
-def test():
-    roi = np.asarray([220, 300, 250, 280])
-    xyxy = xywh2xyxy(roi)
-    image = cv2.imread("cat.jpg")
-    # image = cv2.rectangle(image, xyxy[:2], xyxy[2:], (0, 255, 0), 2)
-    # cv2.imshow("ex", image)
-    # cv2.waitKey(0)
-    tracker = KCFTracker()
-    tracker.init(roi, image)
-    return
-
-
-if __name__ == "__main__":
-    test()
