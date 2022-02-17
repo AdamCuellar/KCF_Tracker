@@ -1,10 +1,7 @@
 import cv2
 import numpy as np
 import fhog
-import faulthandler
-
-faulthandler.enable()
-
+from tools import kalman_filter
 
 def xywh2xyxy(roi):
     xyxy = np.zeros_like(roi)
@@ -13,7 +10,6 @@ def xywh2xyxy(roi):
     xyxy[2] = roi[0] + roi[2]
     xyxy[3] = roi[1] + roi[3]
     return xyxy
-
 
 def fftd(img, backwards=False):
     if backwards:
@@ -70,9 +66,9 @@ class KCFTracker:
             self.scaleStep = 1.05
             self.scaleWeight = 0.95
 
+        self.roi = None
         self._tempF = None
         self._tempShape = np.zeros(2)
-        self._roi = None
         self._gaussF = None
         self._alphaF = None
         self._hannWindow = None
@@ -80,8 +76,8 @@ class KCFTracker:
 
     def init(self, roi, image):
         # roi is expected to be a numpy array of xmin, ymin, width, height
-        self._roi = np.asarray(roi).astype(np.float32)
-        self._tempShape[:] = self._roi[2:4] * (1 + self.padding)
+        self.roi = np.asarray(roi).astype(np.float32)
+        self._tempShape[:] = self.roi[2:4] * (1 + self.padding)
         self._tempShape = self._tempShape.astype(np.int32)
         self._outputSigma = np.sqrt(np.prod(self._tempShape)) * self.outSigmaFactor / self.cellSize
         self._gaussF = self.createGaussianPeak(self._tempShape // self.cellSize)
@@ -92,8 +88,8 @@ class KCFTracker:
 
     def getFeatures(self, image, scaleAdjust=1.0):
         extractedRoi = np.zeros((4))
-        cx = self._roi[0] + self._roi[2] / 2
-        cy = self._roi[1] + self._roi[3] / 2
+        cx = self.roi[0] + self.roi[2] / 2
+        cy = self.roi[1] + self.roi[3] / 2
 
         # adjust extracted roi
         extractedRoi[2:] = self._tempShape * scaleAdjust
@@ -171,17 +167,17 @@ class KCFTracker:
 
         return (rowDelta, colDelta), res.max()
 
-    def update(self, image, updatedRoi=None):
+    def update(self, image, updatedRoi=None, scoreThreshold=0):
         if updatedRoi:
-            self._roi = np.asarray(updatedRoi).astype(np.float32)
+            self.roi = np.asarray(updatedRoi).astype(np.float32)
 
-        if self._roi[0] + self._roi[2] <= 0:  self._roi[0] = -self._roi[2] + 1
-        if self._roi[1] + self._roi[3] <= 0:  self._roi[1] = -self._roi[3] + 1
-        if self._roi[0] >= image.shape[1] - 1:  self._roi[0] = image.shape[1] - 2
-        if self._roi[1] >= image.shape[0] - 1:  self._roi[1] = image.shape[0] - 2
+        if self.roi[0] + self.roi[2] <= 0:  self.roi[0] = -self.roi[2] + 1
+        if self.roi[1] + self.roi[3] <= 0:  self.roi[1] = -self.roi[3] + 1
+        if self.roi[0] >= image.shape[1] - 1:  self.roi[0] = image.shape[1] - 2
+        if self.roi[1] >= image.shape[0] - 1:  self.roi[1] = image.shape[0] - 2
 
-        cx = self._roi[0] + self._roi[2] / 2.
-        cy = self._roi[1] + self._roi[3] / 2.
+        cx = self.roi[0] + self.roi[2] / 2.
+        cy = self.roi[1] + self.roi[3] / 2.
 
         loc, peak_value = self.detect(self._tempF, self.getFeatures(image, 1.0))
 
@@ -194,28 +190,29 @@ class KCFTracker:
 
             if self.scaleWeight * new_peak_value1 > peak_value and new_peak_value1 > new_peak_value2:
                 loc = new_loc1
-                self._roi[2] /= self.scaleStep
-                self._roi[3] /= self.scaleStep
+                self.roi[2] /= self.scaleStep
+                self.roi[3] /= self.scaleStep
             elif self.scaleWeight * new_peak_value2 > peak_value:
                 loc = new_loc2
-                self._roi[2] *= self.scaleStep
-                self._roi[3] *= self.scaleStep
+                self.roi[2] *= self.scaleStep
+                self.roi[3] *= self.scaleStep
 
-        self._roi[0] = (cx + loc[1] * self.cellSize) - (self._roi[2] / 2.0)
-        self._roi[1] = (cy + loc[0] * self.cellSize) - (self._roi[3] / 2.0)
+        # TODO: only update if we meet a score threshold (if we're given a kalman filter)
+        self.roi[0] = (cx + loc[1] * self.cellSize) - (self.roi[2] / 2.0)
+        self.roi[1] = (cy + loc[0] * self.cellSize) - (self.roi[3] / 2.0)
 
-        if self._roi[0] >= image.shape[1] - 1:
-            self._roi[0] = image.shape[1] - 1
-        if self._roi[1] >= image.shape[0] - 1:
-            self._roi[1] = image.shape[0] - 1
-        if self._roi[0] + self._roi[2] <= 0:
-            self._roi[0] = -self._roi[2] + 2
-        if self._roi[1] + self._roi[3] <= 0:
-            self._roi[1] = -self._roi[3] + 2
+        if self.roi[0] >= image.shape[1] - 1:
+            self.roi[0] = image.shape[1] - 1
+        if self.roi[1] >= image.shape[0] - 1:
+            self.roi[1] = image.shape[0] - 1
+        if self.roi[0] + self.roi[2] <= 0:
+            self.roi[0] = -self.roi[2] + 2
+        if self.roi[1] + self.roi[3] <= 0:
+            self.roi[1] = -self.roi[3] + 2
 
-        assert (self._roi[2] > 0 and self._roi[3] > 0)
+        assert (self.roi[2] > 0 and self.roi[3] > 0)
 
         x = self.getFeatures(image, 1.0)
         self.train(x, self.interpFactor)
 
-        return self._roi
+        return self.roi
