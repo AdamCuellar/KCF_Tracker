@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import sys
+import os
 from time import time
 import argparse
 
@@ -16,7 +17,7 @@ interval = 1
 duration = 0.01
 
 # mouse callback function
-def draw_boundingbox(event, x, y):
+def draw_boundingbox(event, x, y, flags, param):
     global selectingObject, initTracking, onTracking, ix, iy, cx, cy, w, h
 
     if event == cv2.EVENT_LBUTTONDOWN:
