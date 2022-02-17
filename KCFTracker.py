@@ -105,10 +105,10 @@ class KCFTracker:
         xs = xs.astype(np.int32)
         ys = np.floor(extractedRoi[1]) + np.arange(0, extractedRoi[3]) - extractedRoi[3] // 2
         ys = ys.astype(np.int32)
-        xs[xs < 1] = 1
-        ys[ys < 1] = 1
-        xs[xs > image.shape[1]] = image.shape[1] - 1
-        ys[ys > image.shape[0]] = image.shape[0] - 1
+        xs[xs < 0] = 1
+        ys[ys < 0] = 1
+        xs[xs >= image.shape[1]] = image.shape[1] - 1
+        ys[ys >= image.shape[0]] = image.shape[0] - 1
         window = image[ys, ...][:, xs, :]
 
         if window.shape[0] != self._tempShape[1] or window.shape[1] != self._tempShape[0]:
@@ -159,9 +159,9 @@ class KCFTracker:
         maxRow, maxCol = np.unravel_index(np.argmax(res, axis=None), res.shape)
         rowDelta, colDelta = maxRow, maxCol
 
-        if maxRow > 0 and maxRow < res.shape[1] - 1:
+        if maxCol > 0 and maxCol < res.shape[1] - 1:
             rowDelta = maxRow + self.subPixelPeak(res[maxRow, maxCol-1], res.max(), res[maxRow, maxCol+1])
-        if maxCol > 0 and maxCol < res.shape[0] - 1:
+        if maxRow > 0 and maxRow < res.shape[0] - 1:
             colDelta = maxCol + self.subPixelPeak(res[maxRow-1, maxCol], res.max(), res[maxRow+1, maxCol])
 
         if rowDelta > features.shape[0] / 2:
