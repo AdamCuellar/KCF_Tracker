@@ -63,7 +63,7 @@ class Track:
     """
 
     def __init__(self, mean, covariance, track_id, n_init, max_age,
-                 useKCF=False, class_num=None):
+                 useKCF=False, class_num=None, image=None):
         self.mean = mean
         self.covariance = covariance
         self.track_id = track_id
@@ -72,7 +72,9 @@ class Track:
         self.time_since_update = 0
 
         self.state = TrackState.Tentative
-        self.kcf = KCFTracker() if useKCF else None
+        if image is not None and useKCF:
+            self.kcf = KCFTracker()
+            self.kcf.init(self.to_tlwh(), image)
 
         self._n_init = n_init
         self._max_age = max_age
@@ -147,7 +149,7 @@ class Track:
         self.mean, self.covariance = kf.update(
             self.mean, self.covariance, detection.to_xyah())
 
-        if image and self.kcf:
+        if image is not None and self.kcf:
             updatedKCF, tmp = self.kcf.update(image, updatedRoi=self.to_tlwh())
             if updatedKCF: self.mean[:4] = self.to_xyah(tmp)
 
@@ -159,7 +161,7 @@ class Track:
     def mark_missed(self, image=None):
         """Mark this track as missed (no association at the current time step).
         """
-        if image and self.kcf:
+        if image is not None and self.kcf:
             # predict should be called before this is used
             updatedKCF, tmp = self.kcf.update(image, updatedRoi=self.to_tlwh())
             # TODO: how should we manage the track state and roi if the KCF found it?
