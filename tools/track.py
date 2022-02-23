@@ -146,12 +146,13 @@ class Track:
             Image if using KCF filter
 
         """
-        self.mean, self.covariance = kf.update(
-            self.mean, self.covariance, detection.to_xyah())
 
         if image is not None and self.kcf:
             updatedKCF, tmp = self.kcf.update(image, updatedRoi=self.to_tlwh())
             if updatedKCF: self.mean[:4] = self.to_xyah(tmp)
+
+        self.mean, self.covariance = kf.update(
+            self.mean, self.covariance, detection.to_xyah())
 
         self.hits += 1
         self.time_since_update = 0

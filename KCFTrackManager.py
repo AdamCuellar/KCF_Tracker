@@ -1,8 +1,8 @@
 import numpy as np
-from tools import kalman_filter
-from tools import linear_assignment
-from tools import iou_matching
-from tools.track import Track
+from .tools import kalman_filter
+from .tools import linear_assignment
+from .tools import iou_matching
+from .tools.track import Track
 
 
 class TrackManager:
@@ -73,7 +73,7 @@ class TrackManager:
         for track_idx in unmatched_tracks:
             self.tracks[track_idx].mark_missed(image)
         for detection_idx in unmatched_detections:
-            self._initiate_track(detections[detection_idx])
+            self._initiate_track(detections[detection_idx], image)
         self.tracks = [t for t in self.tracks if not t.is_deleted()]
 
     def _match(self, detections):
@@ -93,7 +93,8 @@ class TrackManager:
         # Associate confirmed tracks using IOU
         matches_a, unmatched_tracks_a, unmatched_detections = \
             linear_assignment.min_cost_matching(
-                iou_matching.iou_cost, self.max_iou_distance, confirmed_tracks,
+                iou_matching.iou_cost, self.max_iou_distance,
+                [self.tracks[i] for i in confirmed_tracks],
                 detections)
 
         # Associate remaining tracks together with unconfirmed tracks using IOU.
@@ -112,7 +113,7 @@ class TrackManager:
         unmatched_tracks = list(set(unmatched_tracks_a + unmatched_tracks_b))
         return matches, unmatched_tracks, unmatched_detections
 
-    def _initiate_track(self, detection, image):
+    def _initiate_track(self, detection, image=None):
         mean, covariance = self.kf.initiate(detection.to_xyah())
         class_num = detection.class_num
         self.tracks.append(Track(
