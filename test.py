@@ -6,6 +6,7 @@ from time import time
 import argparse
 
 import KCFTracker
+from tools.kalman_filter import KalmanFilter
 
 selectingObject = False
 initTracking = False
@@ -15,6 +16,30 @@ w, h = 0, 0
 
 interval = 1
 duration = 0.01
+
+def to_xyah(box):
+    """Convert bounding box to format `(center x, center y, aspect ratio,
+    height)`, where the aspect ratio is `width / height`.
+    """
+    ret = box.astype(np.float32).copy()
+    ret[:2] += ret[2:] / 2
+    ret[2] /= ret[3]
+    return ret
+
+def to_tlwh(mean):
+    """Get current position in bounding box format `(top left x, top left y,
+    width, height)`.
+
+    Returns
+    -------
+    ndarray
+        The bounding box.
+
+    """
+    ret = mean[:4].copy()
+    ret[2] *= ret[3]
+    ret[:2] -= ret[2:] / 2
+    return ret
 
 # mouse callback function
 def draw_boundingbox(event, x, y, flags, param):
@@ -54,7 +79,9 @@ if __name__ == '__main__':
     cap = cv2.VideoCapture(args.video)
     interval = 30
 
-    tracker = KCFTracker.KCFTracker(multiScale=True)
+    tracker = KCFTracker.KCFTracker(multiScale=False)
+    kf = KalmanFilter()
+    mean, cov = None, None
 
     cv2.namedWindow('tracking')
     cv2.setMouseCallback('tracking', draw_boundingbox)
@@ -72,16 +99,22 @@ if __name__ == '__main__':
             cv2.rectangle(frameDraw, (ix, iy), (ix + w, iy + h), (0, 255, 255), 2)
             print([ix, iy, w, h])
             tracker.init([ix, iy, w, h], frame)
+            mean, cov = kf.initiate(to_xyah(np.asarray([ix, iy, w, h])))
 
             initTracking = False
             onTracking = True
         elif(onTracking):
             t0 = time()
-            boundingbox = tracker.update(frame)
+            mean, cov = kf.predict(mean, cov)
+            kcfUpdated, boundingbox = tracker.update(frame, to_tlwh(mean))
+            if kcfUpdated:
+                mean, cov = kf.update(mean, cov, to_xyah(boundingbox))
+            else:
+                print("Used KF")
+                # boundingbox = to_tlwh(mean)
             t1 = time()
 
             boundingbox = list(map(int, boundingbox))
-            print(boundingbox)
             cv2.rectangle(frameDraw, (boundingbox[0], boundingbox[1]), (boundingbox[0] + boundingbox[2], boundingbox[1] + boundingbox[3]), (0, 255, 255), 1)
 
             duration = 0.8 * duration + 0.2 * (t1 - t0)

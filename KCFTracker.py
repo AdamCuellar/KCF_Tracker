@@ -1,15 +1,7 @@
 import cv2
 import numpy as np
 import fhog
-from tools import kalman_filter
 
-def xywh2xyxy(roi):
-    xyxy = np.zeros_like(roi)
-    xyxy[0] = roi[0] - roi[2] // 2
-    xyxy[1] = roi[1] - roi[3] // 2
-    xyxy[2] = roi[0] + roi[2]
-    xyxy[3] = roi[1] + roi[3]
-    return xyxy
 
 def fftd(img, backwards=False):
     if backwards:
@@ -66,6 +58,7 @@ class KCFTracker:
             self.scaleStep = 1.05
             self.scaleWeight = 0.95
 
+        # variable necessary for kcf
         self.roi = None
         self._tempF = None
         self._tempShape = np.zeros(2)
@@ -77,12 +70,22 @@ class KCFTracker:
     def init(self, roi, image):
         # roi is expected to be a numpy array of xmin, ymin, width, height
         self.roi = np.asarray(roi).astype(np.float32)
+
+        # adjust shape to include padding
         self._tempShape[:] = self.roi[2:4] * (1 + self.padding)
         self._tempShape = self._tempShape.astype(np.int32)
+
+        # get output sigma
         self._outputSigma = np.sqrt(np.prod(self._tempShape)) * self.outSigmaFactor / self.cellSize
+
+        # get gaussian shaped labels in fourier domain and hann window
         self._gaussF = self.createGaussianPeak(self._tempShape // self.cellSize)
         self._hannWindow = cv2.createHanningWindow(self._tempShape // self.cellSize, cv2.CV_32F)
+
+        # get template in fourier domain
         self._tempF = self.getFeatures(image)
+
+        # initialize alpha
         self._alphaF = np.zeros((self._tempF.shape[0], self._tempF.shape[1]), dtype=np.float32)
         self.train(self._tempF, 1.0)
 
@@ -165,11 +168,12 @@ class KCFTracker:
         if colDelta > features.shape[1] / 2:
             colDelta -= features.shape[1]
 
+        if res.min() < 0:
+            res += np.abs(res.min())
+
         return (rowDelta, colDelta), res.max()
 
-    def update(self, image, updatedRoi=None, scoreThreshold=0):
-        if updatedRoi:
-            self.roi = np.asarray(updatedRoi).astype(np.float32)
+    def update(self, image, updatedRoi=None, scoreThreshold=0.65):
 
         if self.roi[0] + self.roi[2] <= 0:  self.roi[0] = -self.roi[2] + 1
         if self.roi[1] + self.roi[3] <= 0:  self.roi[1] = -self.roi[3] + 1
@@ -189,17 +193,25 @@ class KCFTracker:
             new_loc2, new_peak_value2 = self.detect(self._tempF, self.getFeatures(image, self.scaleStep))
 
             if self.scaleWeight * new_peak_value1 > peak_value and new_peak_value1 > new_peak_value2:
+                peak_value = new_peak_value1
                 loc = new_loc1
                 self.roi[2] /= self.scaleStep
                 self.roi[3] /= self.scaleStep
             elif self.scaleWeight * new_peak_value2 > peak_value:
+                peak_value = new_peak_value2
                 loc = new_loc2
                 self.roi[2] *= self.scaleStep
                 self.roi[3] *= self.scaleStep
 
-        # TODO: only update if we meet a score threshold (if we're given a kalman filter)
-        self.roi[0] = (cx + loc[1] * self.cellSize) - (self.roi[2] / 2.0)
-        self.roi[1] = (cy + loc[0] * self.cellSize) - (self.roi[3] / 2.0)
+        # when given a different ROI, only update via KCF if we meet a score threshold.
+        # If we don't meet the threshold update via the ROI
+        # otherwise, update via the KCF
+        updateRoiKCF = peak_value >= scoreThreshold if updatedRoi is not None else True
+        if updateRoiKCF:
+            self.roi[0] = (cx + loc[1] * self.cellSize) - (self.roi[2] / 2.0)
+            self.roi[1] = (cy + loc[0] * self.cellSize) - (self.roi[3] / 2.0)
+        else:
+            self.roi = np.asarray(updatedRoi).astype(np.float32)
 
         if self.roi[0] >= image.shape[1] - 1:
             self.roi[0] = image.shape[1] - 1
@@ -215,4 +227,4 @@ class KCFTracker:
         x = self.getFeatures(image, 1.0)
         self.train(x, self.interpFactor)
 
-        return self.roi
+        return updateRoiKCF, self.roi
