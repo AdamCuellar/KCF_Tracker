@@ -5,7 +5,7 @@ import os
 from time import time
 import argparse
 
-import KCFTracker
+from tools import KCFTracker
 from tools.kalman_filter import KalmanFilter
 
 selectingObject = False
