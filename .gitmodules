@@ -1,3 +1,4 @@
 [submodule "fhog-py3"]
 	path = fhog-py3
 	url = https://github.com/AdamCuellar/fhog-py3.git
+	branch = main
