@@ -1,4 +1,4 @@
-from KCFTracker import KCFTracker
+from .KCFTracker import KCFTracker
 
 class TrackState:
     """

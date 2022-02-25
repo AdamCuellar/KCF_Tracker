@@ -110,7 +110,8 @@ if __name__ == '__main__':
             if kcfUpdated:
                 mean, cov = kf.update(mean, cov, to_xyah(boundingbox))
             else:
-                print("Used KF")
+                pass
+                # print("Used KF")
                 # boundingbox = to_tlwh(mean)
             t1 = time()
 
