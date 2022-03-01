@@ -73,7 +73,7 @@ class Track:
 
         self.state = TrackState.Tentative
         if image is not None and useKCF:
-            self.kcf = KCFTracker()
+            self.kcf = KCFTracker(multiScale=True)
             self.kcf.init(self.to_tlwh(), image)
 
         self._n_init = n_init
@@ -165,7 +165,13 @@ class Track:
         if image is not None and self.kcf:
             # predict should be called before this is used
             updatedKCF, tmp = self.kcf.update(image, updatedRoi=self.to_tlwh())
-            # TODO: how should we manage the track state and roi if the KCF found it?
+
+            # if the KCF found the object then maintain its confirmed status
+            if updatedKCF:
+                self.hits += 1
+                self.time_since_update = 0
+                if self.state == TrackState.Tentative and self.hits >= self._n_init:
+                    self.state = TrackState.Confirmed
 
         if self.state == TrackState.Tentative:
             self.state = TrackState.Deleted
