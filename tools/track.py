@@ -1,4 +1,7 @@
+import cv2
+
 from .KCFTracker import KCFTracker
+import numpy as np
 
 class TrackState:
     """
@@ -158,6 +161,13 @@ class Track:
         self.time_since_update = 0
         if self.state == TrackState.Tentative and self.hits >= self._n_init:
             self.state = TrackState.Confirmed
+
+    def adjust(self, tform):
+        box = self.to_tlbr()
+        box = box.reshape(1, 2, 2).astype(np.float32)
+        adjusted = cv2.perspectiveTransform(box, tform)
+        self.mean[:4] = self.to_xyah(adjusted.flatten())
+        return
 
     def mark_missed(self, image=None):
         """Mark this track as missed (no association at the current time step).

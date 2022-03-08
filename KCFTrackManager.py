@@ -45,6 +45,12 @@ class TrackManager:
         self.tracks = []
         self._next_id = 1
 
+    def adjust(self, tform):
+        """ Adjust position of tracks given homography matrix """
+        for track in self.tracks:
+            track.adjust(tform)
+        return
+
     def predict(self):
         """Propagate track state distributions one time step forward.
 
